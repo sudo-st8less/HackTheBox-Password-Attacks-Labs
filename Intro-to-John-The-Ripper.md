@@ -10,7 +10,7 @@
 
 ### Question 1:
 Use single-crack mode to crack r0lf's password.
-You may not want to use the -device & -fork flags, unless you have multiple
+only use the -device & -fork flags with a gpu array + cuda/opencl
 ```diff
 + $ john --single /home/st8less/Desktop/folder/passwd.txt --devices=1,2 --format=sha512crypt-opencl --fork=2
 ```
