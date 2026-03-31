@@ -1,5 +1,5 @@
 ### CPTS / HTB Penetration Tester Path <br>
-### Password Attacks: Pass The Ticket from Windows <br>
+### Password Attacks: Pass The Ticket (PtT) from Windows <br>
 <mark>hook it up with a follow if this helps.</mark> <br>
 🐦: @<a href="https://x.com/st8less">**st8less**</a>
 
