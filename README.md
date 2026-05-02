@@ -2,11 +2,14 @@
 ### This repo is part of my full catalog of walkthroughs for all labs in the Hack The Box CPTS career path on HTB Academy. <br>
 
 ### <mark>hook the repo up with a &#x2B50; if it helps.</mark>
+### <mark>follow me for chef's kiss hacking memes, hot hot vulns & dark web news:</mark>
 ### 🐦: @<a href="https://x.com/st8less">**st8less**</a>
 <br> 
 
 
--Adding these repos is a work in progress, there are hundreds of pages of notes I'm rereading and editing before commit
+-Adding these is a work in progress
+
+-Every repo has an /obsidian folder with the Obsidian .canvas files for a more visual approach
 
 -I've partially censored the actual flag text in an effort to avoid scraping and pissing HTB off, but the process to find it yourself is documented thoroughly.
 
