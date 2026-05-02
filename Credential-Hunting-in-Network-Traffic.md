@@ -1,6 +1,6 @@
 ### CPTS / HTB Penetration Tester Path <br>
-### Password Attacks: Credential Hunting in Network Traffic <br>
-<mark>hook it up with a follow if this helps.</mark> <br>
+### Password Attacks - Credential Hunting in Network Traffic <br>
+<mark>hook it up with a &#x2B50; if this helps.</mark> <br>
 🐦: @<a href="https://x.com/st8less">**st8less**</a>
 
 <br>
@@ -8,90 +8,113 @@
 
 ---
 
+### Credential Hunting in Network Traffic
+
+
+
+Plaintext protocols still appear in legacy / misconfigured / dev environments. Cleartext = creds in PCAP.
+
+| Plaintext | Encrypted alt | Use case |
+|---|---|---|
+| HTTP | HTTPS | Web |
+| FTP | FTPS / SFTP | File transfer |
+| SNMP | SNMPv3 | Device mgmt |
+| POP3 | POP3S | Mail retrieve |
+| IMAP | IMAPS | Mail mgmt |
+| SMTP | SMTPS | Mail send |
+| LDAP | LDAPS | Directory |
+| DNS | DoH | Name resolution |
+| SMB | SMB 3.0 + TLS | File sharing |
+| VNC | VNC + TLS | Remote desktop |
+
+#### Wireshark display filters
+
+| Filter | Purpose |
+|---|---|
+| `ip.addr == X.X.X.X` | Specific IP |
+| `tcp.port == 80` | Specific port |
+| `http` / `dns` / `icmp` | Protocol |
+| `tcp.flags.syn == 1 && tcp.flags.ack == 0` | SYN packets |
+| `http.request.method == "POST"` | POSTed forms |
+| `tcp.stream eq 53` | Single TCP stream |
+| `eth.addr == 00:11:22:...` | MAC address |
+| `http contains "passw"` | String search |
+
+`Edit > Find Packet` for direct string searches inside packet bytes.
+
+#### Pcredz — automated credential extractor
+
+Pulls: CC numbers, POP/SMTP/IMAP/SNMP/FTP/HTTP creds, NTLMv1/v2 hashes (DCE-RPC, SMB1/2, LDAP, MSSQL, HTTP), Kerberos AS-REQ pre-auth etype 23.
+
+```diff
++ $ ./Pcredz -f demo.pcapng -t -v
+```
+
+<br>
+
+---
+
+<br>
+
+### Exercise
+
+---
+
 ### Question 1:
 The packet capture contains cleartext credit card information. What is the number that was transmitted?
 
-In your filter bar in Wireshark, simply search for `http contains "card"`. Look for the POST request, and expand the 'html form url encoded...' section in the OSI layer inspection window.
+In Wireshark filter bar:
 
-	Frame 10465: 676 bytes on wire (5408 bits), 676 bytes captured (5408 bits) on interface eth1, id 0
-	Ethernet II, Src: ASUSTekCOMPU_1c:2c:77 (f0:2f:74:1c:2c:77), Dst: VMware_7c:28:ec (00:0c:29:7c:28:ec)
-	Internet Protocol Version 4, Src: 192.168.31.243, Dst: 192.168.31.238
-	Transmission Control Protocol, Src Port: 55705, Dst Port: 80, Seq: 1, Ack: 1, Len: 622
-	Hypertext Transfer Protocol
-	HTML Form URL Encoded: application/x-www-form-urlencoded
-	    Form item: "card_name" = "Joshua M Benito"
-	    Form item: "card_number" = "5156 8829 4478 9834"
-	    Form item: "exp_date" = "12/30"
-	    Form item: "cvv" = "928"
-	    Form item: "product_id" = "SHRT553"
-	    Form item: "quantity" = "3"
-	    Form item: "price" = "49.99"
+```diff
++ http contains "card"
+```
 
-🚩 found **5156 8829 4478 9834**.
+<br>
+
+Find the POST → expand `HTML Form URL Encoded` in the protocol tree:
+
+	Form item: "card_name" = "Joshua M Benito"
+	Form item: "card_number" = "5156 8829 4478 9834"
+	Form item: "exp_date" = "12/30"
+	Form item: "cvv" = "928"
+
+&#x1F6A9; found **5156 8829 44--edit--78 9834**.
 
 ---
 
 ### Question 2:
 What is the SNMPv2 community string that was used?
 
-Clone the PCredz repo:
+Clone Pcredz, install deps, run against the supplied PCAP:
+
 ```diff
 + $ git clone https://github.com/lgandx/PCredz.git
-```
-
-Download & unzip the pcap:
-```diff
 + $ wget https://academy.hackthebox.com/storage/modules/147/credential-hunting-in-network-traffic.zip
 + $ unzip credential-hunting-in-network-traffic.zip
-```
-
-Install dependencies:
-```diff
 + $ sudo apt install python3-pip && sudo apt-get install libpcap-dev && pip3 install Cython && pip3 install python-libpcap
-```
-
-Now run it:
-```diff
 + $ python3 ./Pcredz -f demo.pcapng
 ```
 
-	Pcredz 2.0.3
-	
-	Author: Laurent Gaffie <lgaffie@secorizon.com>
-	
-	This script will extract NTLM (HTTP,LDAP,SMB,MSSQL,RPC, etc), Kerberos,
-	FTP, HTTP Basic and credit card data from a given pcap file or from a live interface.
-	
-	CC number scanning activated
-	
-	Unknown format, trying TCPDump format
-	
-	protocol: udp 192.168.31.211:59022 > 192.168.31.238:161
 	Found SNMPv2 Community string: s3cr3tSNMPC0mmun1ty
-	
-	protocol: tcp 192.168.31.243:55707 > 192.168.31.211:21
 	FTP User: leah
 	FTP Pass: qwerty123
-	
-	
-	demo.pcapng parsed in: 1.98 seconds (File size 15.5 Mo).
 
-This gave us our next two answers.
-
-🚩 found **s3cr3tSNMPC--edit--0mmun1ty**.
+&#x1F6A9; found **s3cr3tSNMP--edit--C0mmun1ty**.
 
 ---
 
 ### Question 3:
 What is the password of the user who logged into FTP?
 
-🚩 found **qwerty123**.
+#### Same Pcredz output captured the FTP cleartext.
+
+&#x1F6A9; found **qwer--edit--ty123**.
 
 ---
 
 ### Question 4:
 What file did the user download over FTP?
 
-Filter Wireshark by `FTP` and look at the response message directly above the '226 Transfer Complete' message.
+In Wireshark, filter `FTP`. Look at the response message just above `226 Transfer complete`.
 
-🚩 found **creds.txt**.
+&#x1F6A9; found **creds.txt**.
